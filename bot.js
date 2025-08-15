@@ -8,6 +8,7 @@ const HttpsProxyAgent = require("https-proxy-agent");
 const PRIMARY_PROXY = "http://103.119.112.54:80"; // replace if needed
 const proxyAgent = new HttpsProxyAgent(PRIMARY_PROXY);
 
+// User-specific paths
 const uid = process.argv[2];
 const userDir = path.join(__dirname, "users", uid);
 const appStatePath = path.join(userDir, "appstate.json");
@@ -41,12 +42,11 @@ try {
   process.exit(1);
 }
 
-let GROUP_THREAD_ID = null;
-let LOCKED_GROUP_NAME = null;
+// Multiple GC lock support
+let LOCKED_GROUPS = {}; // { threadID: {name: "LOCKED_NAME"} }
 let lockedNick = null;
 let nickLockEnabled = false;
 let nickRemoveEnabled = false;
-let gcAutoRemoveEnabled = false;
 
 // Login Options
 const loginOptions = {
@@ -87,11 +87,11 @@ function safeLogin(options) {
 
     // Anti-sleep heartbeat
     setInterval(async () => {
-      if (GROUP_THREAD_ID) {
+      for (const threadID in LOCKED_GROUPS) {
         try {
-          await api.sendTypingIndicator(GROUP_THREAD_ID, true);
-          setTimeout(() => api.sendTypingIndicator(GROUP_THREAD_ID, false), 1000 + Math.random() * 1000);
-          log("💤 Anti-Sleep Triggered");
+          await api.sendTypingIndicator(threadID, true);
+          setTimeout(() => api.sendTypingIndicator(threadID, false), 1000 + Math.random() * 1000);
+          log(`💤 Anti-Sleep Triggered in ${threadID}`);
         } catch {}
       }
     }, 300000);
@@ -117,28 +117,26 @@ function safeLogin(options) {
 
       if (event.type === "message") log(`📩 ${senderID}: ${event.body} (Group: ${threadID})`);
 
-      // ====== Commands Logic (unchanged) ======
+      // ====== Multiple GC Lock Logic ======
       if (body.startsWith("/gclock") && senderID === BOSS_UID) {
         const newName = event.body.slice(7).trim();
-        GROUP_THREAD_ID = threadID;
-        LOCKED_GROUP_NAME = newName;
-        gcAutoRemoveEnabled = false;
+        LOCKED_GROUPS[threadID] = { name: newName };
         try { await api.setTitle(newName, threadID); api.sendMessage(`🔒 Naam lock ho gaya: "${newName}"`, threadID); } catch { api.sendMessage("❌ Naam lock nahi hua", threadID); }
       }
 
       if (body === "/gcremove" && senderID === BOSS_UID) {
-        try { await api.setTitle("", threadID); LOCKED_GROUP_NAME = null; GROUP_THREAD_ID = threadID; gcAutoRemoveEnabled = true; api.sendMessage("🧹 Naam hata diya. Auto remove ON ✅", threadID); } catch { api.sendMessage("❌ Naam remove fail", threadID); }
+        if (LOCKED_GROUPS[threadID]) delete LOCKED_GROUPS[threadID];
+        try { await api.setTitle("", threadID); api.sendMessage("🧹 Naam hata diya. Lock removed ✅", threadID); } catch { api.sendMessage("❌ Naam remove fail", threadID); }
       }
 
       if (event.logMessageType === "log:thread-name") {
         const changed = event.logMessageData.name;
-        if (LOCKED_GROUP_NAME && threadID === GROUP_THREAD_ID && changed !== LOCKED_GROUP_NAME) {
-          try { await api.setTitle(LOCKED_GROUP_NAME, threadID); } catch { api.sendMessage("❌ GC naam wapas nahi hua", threadID); }
-        } else if (gcAutoRemoveEnabled) {
-          try { await api.setTitle("", threadID); log(`🧹 GC auto-removed: "${changed}"`); } catch { log("❌ GC auto remove fail"); }
+        if (LOCKED_GROUPS[threadID] && changed !== LOCKED_GROUPS[threadID].name) {
+          try { await api.setTitle(LOCKED_GROUPS[threadID].name, threadID); } catch { api.sendMessage("❌ GC naam wapas nahi hua", threadID); }
         }
       }
 
+      // ====== Nickname Lock Logic ======
       if (body.startsWith("/nicklock on") && senderID === BOSS_UID) {
         lockedNick = event.body.slice(13).trim();
         nickLockEnabled = true;
@@ -152,27 +150,51 @@ function safeLogin(options) {
       if (body === "/nicklock off" && senderID === BOSS_UID) { nickLockEnabled = false; lockedNick = null; api.sendMessage("🔓 Nickname lock removed", threadID); }
 
       if (body === "/nickremoveall" && senderID === BOSS_UID) {
-        nickRemoveEnabled = true;
-        try { const info = await api.getThreadInfo(threadID); for (const u of info.userInfo) await api.changeNickname("", threadID, u.id); api.sendMessage("💥 Nicknames removed. Auto-remove ON", threadID); } catch { api.sendMessage("❌ Nick remove fail", threadID); }
+        try { const info = await api.getThreadInfo(threadID); for (const u of info.userInfo) await api.changeNickname("", threadID, u.id); api.sendMessage("💥 Nicknames removed", threadID); } catch { api.sendMessage("❌ Nick remove fail", threadID); }
       }
-
-      if (body === "/nickremoveoff" && senderID === BOSS_UID) { nickRemoveEnabled = false; api.sendMessage("🛑 Nick auto remove OFF", threadID); }
 
       if (event.logMessageType === "log:user-nickname") {
         const changedUID = event.logMessageData.participant_id;
         const newNick = event.logMessageData.nickname;
         if (nickLockEnabled && newNick !== lockedNick) try { await api.changeNickname(lockedNick, threadID, changedUID); } catch { log("❌ Nick revert fail"); }
-        if (nickRemoveEnabled && newNick !== "") try { await api.changeNickname("", threadID, changedUID); } catch { log("❌ Nick auto remove fail"); }
       }
 
+      // ====== Anti-left Command ======
+      if (event.logMessageType === "log:unsubscribe") {
+        const leftUID = event.logMessageData.leftParticipantFbId;
+        api.sendMessage(`⚠️ User ${leftUID} left the group ${threadID}`, threadID);
+        log(`🚪 User ${leftUID} left GC ${threadID}`);
+      }
+
+      // ====== Status Command ======
       if (body === "/status" && senderID === BOSS_UID) {
+        const gcLocks = Object.entries(LOCKED_GROUPS).map(([tid, info]) => `${tid}: "${info.name}"`).join("\n") || "OFF";
         api.sendMessage(`
 BOT STATUS:
-• GC Lock: ${LOCKED_GROUP_NAME || "OFF"}
-• GC AutoRemove: ${gcAutoRemoveEnabled ? "ON" : "OFF"}
+• GC Locks: 
+${gcLocks}
 • Nick Lock: ${nickLockEnabled ? `ON (${lockedNick})` : "OFF"}
-• Nick AutoRemove: ${nickRemoveEnabled ? "ON" : "OFF"}
-        `.trim(), threadID);
+`.trim(), threadID);
+      }
+
+      // ====== Help Command ======
+      if (body === "/help" && senderID === BOSS_UID) {
+        api.sendMessage(`
+📜 Commands List:
+/gclock <name> — Lock current GC name
+/gcremove — Remove GC lock
+/nicklock on <nick> — Lock nicknames
+/nicklock off — Remove nick lock
+/nickremoveall — Remove all nicknames
+/status — Show bot status
+/help — Show this help
+`.trim(), threadID);
+      }
+
+      // ====== Exit Command ======
+      if (body === "/exit" && senderID === BOSS_UID) {
+        api.sendMessage("🛑 Bot shutting down...", threadID);
+        process.exit(0);
       }
     });
   });
