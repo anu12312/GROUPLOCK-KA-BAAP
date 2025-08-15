@@ -1,17 +1,20 @@
+
 {
-  "name": "anu-inside-bot",
+  "name": "fb-panel-bot",
   "version": "1.0.0",
-  "description": "Facebook Messenger Bot with stylish UI ❤️ANU INSIDE💠",
+  "description": "Facebook Messenger Group Bot with Panel",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "author": "Anurag Mishra",
-  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "ws3-fca": "^1.3.0",
-    "https-proxy-agent": "^5.0.1",
-    "body-parser": "^1.20.2"
-  }
+    "express-fileupload": "^1.4.0",
+    "ws3-fca": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "Anurag",
+  "license": "MIT"
 }
