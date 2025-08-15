@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>❤️ANU INSIDE💠</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff; text-align: center;
+      overflow: hidden; background: #000;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; user-select: none;
+    }
+    video#bg-video {
+      position: fixed; top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      object-fit: cover; z-index: -1;
+      filter: brightness(0.6) contrast(1.1);
+      pointer-events: none;
+    }
+    .clock {
+      position: fixed; top: 20px; right: 30px;
+      font-size: 22px; color: #00ffff; font-weight: 900;
+      text-shadow:0 0 8px #00ffff,0 0 18px #00ffff,0 0 26px #00ffff;
+      font-family: 'Courier New', Courier, monospace; letter-spacing: 3px;
+      z-index: 9999; background: rgba(0,0,0,0); padding: 5px 14px;
+    }
+    .container {
+      margin-top: 5vh; padding: 40px 45px; border-radius: 30px;
+      max-width: 680px; width: 100%; backdrop-filter: blur(8px);
+      background: rgba(0,0,0,0.0);
+    }
+    .heading {
+      font-size: 48px; font-weight: 900;
+      color: #00ffff; text-shadow: 0 0 28px #00ccff,0 0 42px #0099ff,0 0 60px #00ccff;
+      font-family: 'Courier New', monospace; user-select: none;
+      letter-spacing: 6px; text-align: center; margin-bottom: 42px;
+      white-space: nowrap; /* ensures one line */
+    }
+    input, textarea {
+      width: 100%; padding: 18px 22px; margin: 14px 0;
+      background: rgba(0,0,0,0.0); color: #00ffff; border: none;
+      border-radius: 20px; font-family: 'Courier New', monospace; font-size: 17px;
+      resize: vertical; outline: none; box-shadow: 0 0 10px #00ffff55 inset;
+      caret-color: #00ffff;
+    }
+    input::placeholder, textarea::placeholder { color: #00ffff88; font-weight: 600; }
+    button {
+      padding: 16px 34px; margin: 14px 10px 0 10px; border-radius: 24px;
+      font-size: 20px; font-weight: 900; cursor: pointer; border: none;
+      letter-spacing: 2.5px; font-family: 'Segoe UI Semibold', Tahoma, Geneva, Verdana, sans-serif;
+      text-transform: uppercase; text-shadow: 0 0 6px #00ccff;
+    }
+    .start-btn { background: linear-gradient(90deg,#00ffff,#0099ff); color:#fff; filter: drop-shadow(0 0 14px #00ccffdd);}
+    .start-btn:hover { box-shadow:0 0 65px #00ccffff, inset 0 0 50px #0099ff; transform: scale(1.1);}
+    .stop-btn { background: linear-gradient(90deg,#770000,#cc0044); color:#fff; filter: drop-shadow(0 0 14px #cc0044dd);}
+    .stop-btn:hover { box-shadow:0 0 65px #cc0055ff, inset 0 0 50px #cc0077ff; transform: scale(1.1);}
+    .log-box {
+      background: rgba(0,0,0,0.0); margin-top: 24px; padding: 22px; height: 280px;
+      overflow-y: auto; text-align: left; white-space: pre-wrap;
+      font-size: 15px; color: #00ffff; font-family: 'Courier New', Courier, monospace; line-height: 1.4;
+    }
+    .commands {
+      margin-top: 28px; font-size: 15px; padding: 18px 22px; color: #00ffffdd;
+      text-align: left; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6;
+    }
+    .commands b { color:#00ccff; font-weight:900; text-transform: uppercase; }
+    .status {
+      margin-top: 22px; font-weight:900; font-size:20px; color:#00ffff;
+      text-shadow:0 0 12px #00ccff,0 0 28px #0099ff; letter-spacing:2px;
+      font-family:'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <video autoplay muted loop playsinline id="bg-video">
+    <source src="https://files.catbox.moe/oumyd2.mp4" type="video/mp4" />
+  </video>
+
+  <div class="clock" id="clock">🕒 --:--:--</div>
+
+  <div class="container">
+    <div class="heading">❤️ANU INSIDE💠</div>
+
+    <input id="uid" placeholder="👑 Enter Admin UID..." />
+    <textarea id="appstate" placeholder="📋 Paste AppState JSON..."></textarea>
+
+    <button class="start-btn" onclick="startBot()">🟢 Start Bot</button>
+    <button class="stop-btn" onclick="stopBot()">🔴 Stop Bot</button>
+
+    <div class="status" id="bot-status">Bot Status: OFFLINE</div>
+
+    <div class="log-box" id="logs">📜 Waiting for logs...</div>
+
+    <div class="commands">
+      ⚙️ <b>Commands:</b><br/>
+      /gclock • /gcremove • /nicklock on • /nicklock off • /nickremoveall • /nickremoveoff
+    </div>
+  </div>
+
+  <script>
+    function startBot() {
+      const appstate=document.getElementById("appstate").value.trim();
+      const admin=document.getElementById("uid").value.trim();
+      if(!appstate||!admin)return alert("❌ Enter AppState and UID!");
+      fetch("/start-bot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({appstate,admin})}).then(res=>res.text()).then(alert);
+      const status=document.getElementById("bot-status"); status.innerText="Bot Status: ONLINE";
+    }
+    function stopBot() {
+      const uid=document.getElementById("uid").value.trim();
+      if(!uid)return alert("❌ Enter UID to stop bot.");
+      fetch(`/stop-bot?uid=${encodeURIComponent(uid)}`).then(res=>res.text()).then(alert);
+      const status=document.getElementById("bot-status"); status.innerText="Bot Status: OFFLINE";
+    }
+    setInterval(()=>{
+      const uid=document.getElementById("uid").value.trim();
+      if(!uid)return;
+      fetch(`/logs?uid=${encodeURIComponent(uid)}`).then(res=>res.text()).then(log=>{
+        const logsEl=document.getElementById("logs");
+        if(log!==logsEl.textContent){ logsEl.textContent=log; logsEl.scrollTop=logsEl.scrollHeight; }
+      });
+    },3000);
+    function updateClock(){const now=new Date(); const time=now.toLocaleTimeString(); document.getElementById("clock").innerText=`🕒 ${time}`;}
+    setInterval(updateClock,1000); updateClock();
+  </script>
+</body>
+</html>
