@@ -38,7 +38,7 @@
       color: #00ffff; text-shadow: 0 0 28px #00ccff,0 0 42px #0099ff,0 0 60px #00ccff;
       font-family: 'Courier New', monospace; user-select: none;
       letter-spacing: 6px; text-align: center; margin-bottom: 42px;
-      white-space: nowrap; /* ensures one line */
+      white-space: nowrap;
     }
     input, textarea {
       width: 100%; padding: 18px 22px; margin: 14px 0;
@@ -98,33 +98,58 @@
 
     <div class="commands">
       ⚙️ <b>Commands:</b><br/>
-      /gclock • /gcremove • /nicklock on • /nicklock off • /nickremoveall • /nickremoveoff
+      /gclock • /gcremove • /nicklock on • /nicklock off • /nickremoveall • /nickremoveoff • /status • /help • /exit
     </div>
   </div>
 
   <script>
-    function startBot() {
-      const appstate=document.getElementById("appstate").value.trim();
-      const admin=document.getElementById("uid").value.trim();
-      if(!appstate||!admin)return alert("❌ Enter AppState and UID!");
-      fetch("/start-bot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({appstate,admin})}).then(res=>res.text()).then(alert);
-      const status=document.getElementById("bot-status"); status.innerText="Bot Status: ONLINE";
+    async function startBot() {
+      const appstate = document.getElementById("appstate").value.trim();
+      const admin = document.getElementById("uid").value.trim();
+      if(!appstate || !admin) return alert("❌ Enter AppState and UID!");
+      try {
+        const res = await fetch("/start-bot", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ appstate, admin })
+        });
+        const msg = await res.text();
+        alert(msg);
+        document.getElementById("bot-status").innerText = "Bot Status: ONLINE";
+      } catch(e) { alert("❌ Error starting bot: "+e); }
     }
-    function stopBot() {
-      const uid=document.getElementById("uid").value.trim();
-      if(!uid)return alert("❌ Enter UID to stop bot.");
-      fetch(`/stop-bot?uid=${encodeURIComponent(uid)}`).then(res=>res.text()).then(alert);
-      const status=document.getElementById("bot-status"); status.innerText="Bot Status: OFFLINE";
+
+    async function stopBot() {
+      const uid = document.getElementById("uid").value.trim();
+      if(!uid) return alert("❌ Enter UID to stop bot.");
+      try {
+        const res = await fetch(`/stop-bot?uid=${encodeURIComponent(uid)}`);
+        const msg = await res.text();
+        alert(msg);
+        document.getElementById("bot-status").innerText = "Bot Status: OFFLINE";
+      } catch(e) { alert("❌ Error stopping bot: "+e); }
     }
-    setInterval(()=>{
-      const uid=document.getElementById("uid").value.trim();
-      if(!uid)return;
-      fetch(`/logs?uid=${encodeURIComponent(uid)}`).then(res=>res.text()).then(log=>{
-        const logsEl=document.getElementById("logs");
-        if(log!==logsEl.textContent){ logsEl.textContent=log; logsEl.scrollTop=logsEl.scrollHeight; }
-      });
-    },3000);
-    function updateClock(){const now=new Date(); const time=now.toLocaleTimeString(); document.getElementById("clock").innerText=`🕒 ${time}`;}
+
+    // Fetch logs every 3 seconds
+    setInterval(async ()=>{
+      const uid = document.getElementById("uid").value.trim();
+      if(!uid) return;
+      try {
+        const res = await fetch(`/logs?uid=${encodeURIComponent(uid)}`);
+        const logText = await res.text();
+        const logsEl = document.getElementById("logs");
+        if(logText !== logsEl.textContent) {
+          logsEl.textContent = logText;
+          logsEl.scrollTop = logsEl.scrollHeight;
+        }
+      } catch{}
+    }, 3000);
+
+    function updateClock(){
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      document.getElementById("clock").innerText = `🕒 ${time}`;
+    }
     setInterval(updateClock,1000); updateClock();
   </script>
 </body>
