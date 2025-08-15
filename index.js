@@ -1,57 +1,63 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const fs = require("fs");
-const path = require("path");
 const { spawn } = require("child_process");
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, "public"))); // your HTML panel in public/
+app.use(express.static("public")); // HTML aur video files yaha rakho
 
-let botProcess = null;
+// Store running bots
+const runningBots = {};
 
-// Start Bot
-app.post("/start", (req, res) => {
-  const { uid, appstate } = req.body;
-  if (!uid || !appstate) return res.status(400).send("❌ UID or AppState missing");
+// Start bot endpoint
+app.post("/start-bot", (req, res) => {
+  const { appstate, admin } = req.body;
+  if (!appstate || !admin) return res.status(400).send("❌ AppState & UID required");
 
-  const userDir = path.join(__dirname, "users", uid);
-  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+  // Save AppState & admin UID to temp files
+  const uidFolder = `./users/${admin}`;
+  if (!fs.existsSync(uidFolder)) fs.mkdirSync(uidFolder, { recursive: true });
+  fs.writeFileSync(`${uidFolder}/appstate.json`, appstate);
+  fs.writeFileSync(`${uidFolder}/admin.txt`, admin);
 
-  const appStatePath = path.join(userDir, "appstate.json");
-  fs.writeFileSync(appStatePath, appstate, "utf-8");
+  // Start bot process using child_process
+  if (runningBots[admin]) return res.send("⚠️ Bot already running!");
+  const botProcess = spawn("node", ["bot.js", admin], { stdio: ["pipe","pipe","pipe"] });
+  runningBots[admin] = botProcess;
 
-  const adminPath = path.join(userDir, "admin.txt");
-  fs.writeFileSync(adminPath, uid, "utf-8"); // Admin UID same as input
+  botProcess.stdout.on("data", data => {
+    fs.appendFileSync(`${uidFolder}/logs.txt`, data.toString());
+  });
+  botProcess.stderr.on("data", data => {
+    fs.appendFileSync(`${uidFolder}/logs.txt`, "ERR: " + data.toString());
+  });
+  botProcess.on("exit", () => {
+    delete runningBots[admin];
+  });
 
-  // Kill existing bot if running
-  if (botProcess) botProcess.kill();
-
-  // Spawn bot.js
-  botProcess = spawn("node", ["bot.js", uid], { stdio: "inherit" });
-
-  res.send("✅ Bot starting...");
+  res.send("✅ Bot started successfully!");
 });
 
-// Stop Bot
-app.post("/stop", (req, res) => {
-  if (botProcess) {
-    botProcess.kill();
-    botProcess = null;
-    return res.send("🛑 Bot stopped");
-  }
-  res.send("❌ Bot was not running");
+// Stop bot endpoint
+app.get("/stop-bot", (req, res) => {
+  const { uid } = req.query;
+  if (!uid) return res.status(400).send("❌ UID required");
+  if (!runningBots[uid]) return res.send("⚠️ Bot not running");
+  runningBots[uid].kill();
+  delete runningBots[uid];
+  res.send("🛑 Bot stopped");
 });
 
-// Bot Status
-app.get("/status", (req, res) => {
-  res.send(botProcess ? "🟢 ONLINE" : "🔴 OFFLINE");
+// Logs endpoint
+app.get("/logs", (req, res) => {
+  const { uid } = req.query;
+  if (!uid) return res.status(400).send("❌ UID required");
+  const logPath = `./users/${uid}/logs.txt`;
+  if (!fs.existsSync(logPath)) return res.send("📜 No logs yet...");
+  const logs = fs.readFileSync(logPath, "utf-8");
+  res.send(logs);
 });
 
-// Server
-app.listen(PORT, () => {
-  console.log(`🌐 Panel running on http://localhost:${PORT}`);
-});
+app.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
