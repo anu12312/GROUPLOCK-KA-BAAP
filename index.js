@@ -1,50 +1,57 @@
 const express = require("express");
+const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
-const bodyParser = require("body-parser");
-const { startBot, stopBot, getLogs } = require("./bot"); // bot logic
+const { spawn } = require("child_process");
 
 const app = express();
-app.use(bodyParser.json());
 const PORT = process.env.PORT || 3000;
 
-// Serve HTML + assets
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public"))); // your HTML panel in public/
+
+let botProcess = null;
+
+// Start Bot
+app.post("/start", (req, res) => {
+  const { uid, appstate } = req.body;
+  if (!uid || !appstate) return res.status(400).send("❌ UID or AppState missing");
+
+  const userDir = path.join(__dirname, "users", uid);
+  if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+
+  const appStatePath = path.join(userDir, "appstate.json");
+  fs.writeFileSync(appStatePath, appstate, "utf-8");
+
+  const adminPath = path.join(userDir, "admin.txt");
+  fs.writeFileSync(adminPath, uid, "utf-8"); // Admin UID same as input
+
+  // Kill existing bot if running
+  if (botProcess) botProcess.kill();
+
+  // Spawn bot.js
+  botProcess = spawn("node", ["bot.js", uid], { stdio: "inherit" });
+
+  res.send("✅ Bot starting...");
 });
 
-// Start bot endpoint
-app.post("/start-bot", async (req, res) => {
-  const { appstate, admin } = req.body;
-  if (!appstate || !admin) return res.status(400).send("❌ Missing AppState or UID!");
-  try {
-    await startBot(admin, appstate);
-    res.send(`✅ Bot started for UID: ${admin}`);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("❌ Failed to start bot");
+// Stop Bot
+app.post("/stop", (req, res) => {
+  if (botProcess) {
+    botProcess.kill();
+    botProcess = null;
+    return res.send("🛑 Bot stopped");
   }
+  res.send("❌ Bot was not running");
 });
 
-// Stop bot endpoint
-app.get("/stop-bot", async (req, res) => {
-  const { uid } = req.query;
-  if (!uid) return res.status(400).send("❌ Missing UID!");
-  try {
-    await stopBot(uid);
-    res.send(`🛑 Bot stopped for UID: ${uid}`);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("❌ Failed to stop bot");
-  }
+// Bot Status
+app.get("/status", (req, res) => {
+  res.send(botProcess ? "🟢 ONLINE" : "🔴 OFFLINE");
 });
 
-// Logs endpoint
-app.get("/logs", (req, res) => {
-  const { uid } = req.query;
-  if (!uid) return res.status(400).send("❌ Missing UID!");
-  const log = getLogs(uid);
-  res.send(log);
+// Server
+app.listen(PORT, () => {
+  console.log(`🌐 Panel running on http://localhost:${PORT}`);
 });
-
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
