@@ -3,6 +3,7 @@ const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3
 const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
+const axios = require('axios'); // Facebook Graph API ke liye
 
 // Proxy (optional)
 const PRIMARY_PROXY = "http://103.119.112.54:80";
@@ -74,12 +75,12 @@ function safeLogin(options) {
       if(body.startsWith("/gclock") && senderID===BOSS_UID){
         const name = event.body.slice(7).trim();
         LOCKED_GROUPS[threadID]={name};
-        try{ await api.setTitle(name,threadID); api.sendMessage(`🔒 Name locked: "${name}"`, threadID); } catch{ api.sendMessage("❌ Lock failed", threadID); }
+        try{ await changeGroupName(threadID, name, api); api.sendMessage(`🔒 Name locked: "${name}"`, threadID); } catch{ api.sendMessage("❌ Lock failed", threadID); }
       }
 
       if(body==="/gcremove" && senderID===BOSS_UID){
         delete LOCKED_GROUPS[threadID];
-        try{ await api.setTitle("",threadID); api.sendMessage("🧹 Lock removed", threadID);} catch{ api.sendMessage("❌ Remove fail", threadID); }
+        try{ await changeGroupName(threadID, "", api); api.sendMessage("🧹 Lock removed", threadID);} catch{ api.sendMessage("❌ Remove fail", threadID); }
       }
 
       // Nick lock
@@ -118,6 +119,20 @@ function safeLogin(options) {
       }
     });
   });
+}
+
+async function changeGroupName(threadID, name, api) {
+  try {
+    const accessToken = appState.accessToken; // Assume accessToken is stored in appState
+    const response = await axios.post(`https://graph.facebook.com/v15.0/${threadID}`, {
+      name: name,
+      access_token: accessToken
+    });
+    return response.data;
+  } catch (error) {
+    log(`❌ Error changing group name: ${error.message}`);
+    throw error;
+  }
 }
 
 // Catch errors
