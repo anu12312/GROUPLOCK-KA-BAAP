@@ -130,8 +130,18 @@ async function changeGroupName(threadID, name, api) {
     });
     return response.data;
   } catch (error) {
-    log(`❌ Error changing group name: ${error.message}`);
+    log(`❌ Error changing group name: ${error.response ? error.response.data : error.message}`);
     throw error;
+  }
+}
+
+async function verifyAccessToken(accessToken) {
+  try {
+    const response = await axios.get(`https://graph.facebook.com/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
+    return response.data.data.is_valid;
+  } catch (error) {
+    log(`❌ Error verifying access token: ${error.message}`);
+    return false;
   }
 }
 
