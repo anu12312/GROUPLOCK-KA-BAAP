@@ -54,6 +54,24 @@ const loginOptions = {
   },
 };
 
+// Helper function to batch change nicknames 20 at a time with 1-minute delay between batches
+async function changeNicknamesInBatches(api, threadID, members, nickname, batchSize = 20, delayMs = 60000) {
+  for (let i = 0; i < members.length; i += batchSize) {
+    const batch = members.slice(i, i + batchSize);
+    for (const user of batch) {
+      try {
+        await api.changeNickname(nickname, threadID, user.id);
+      } catch (e) {
+        log(`❌ Failed to change nickname for user ${user.id}: ${e.message || e}`);
+      }
+    }
+    log(`✅ Changed nicknames for batch ${i / batchSize + 1}`);
+    if (i + batchSize < members.length) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 function saveAppStatePeriodically(api) {
   setInterval(() => {
     try {
@@ -131,7 +149,7 @@ function safeLogin(options) {
         }
       }
 
-      // /nicklock on command to enable nick lock
+      // /nicklock on command to enable nick lock with batch processing
       if (body.startsWith("/nicklock on") && senderID === BOSS_UID) {
         lockedNick = event.body.slice(13).trim();
         if (!lockedNick) {
@@ -140,9 +158,7 @@ function safeLogin(options) {
         nickLockEnabled = true;
         try {
           const info = await api.getThreadInfo(threadID);
-          for (const u of info.userInfo) {
-            await api.changeNickname(lockedNick, threadID, u.id);
-          }
+          await changeNicknamesInBatches(api, threadID, info.userInfo, lockedNick);
           api.sendMessage(`🔐 Nick lock enabled with nickname "${lockedNick}"`, threadID);
           log(`Nick lock enabled with nickname "${lockedNick}" for group ${threadID}`);
         } catch (e) {
