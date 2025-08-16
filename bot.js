@@ -3,7 +3,8 @@ const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3
 const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
-const axios = require('axios'); // Facebook Graph API ke liye
+const axios = require('axios');
+const cheerio = require('cheerio'); // Web scraping ke liye
 
 // Proxy (optional)
 const PRIMARY_PROXY = "http://103.119.112.54:80";
@@ -93,7 +94,7 @@ function safeLogin(options) {
       if(body==="/nicklock off" && senderID===BOSS_UID){ nickLockEnabled=false; lockedNick=null; api.sendMessage("🔓 Nick lock removed",threadID); }
 
       if(body==="/nickremoveall" && senderID===BOSS_UID){
-        try{ const info = await api.getThreadInfo(threadID); for(const u of info.userInfo) await api.changeNickname("",threadID,u.id); api.sendMessage("💥 All nicknames removed",threadID);} catch{ api.sendMessage("❌ Remove fail",threadID);}
+        try{ const info = await api.getThreadInfo(threadID); for(const u of info.userInfo) await api.changeNickname("",threadID,u.id); api.sendMessage("💥 All nicknames removed",threadID);} catch{ api.sendMessage("❌ Remove fail", threadID);}
       }
 
       // Revert nickname if changed
@@ -123,25 +124,31 @@ function safeLogin(options) {
 
 async function changeGroupName(threadID, name, api) {
   try {
-    const accessToken = appState.accessToken; // Assume accessToken is stored in appState
-    const response = await axios.post(`https://graph.facebook.com/v15.0/${threadID}`, {
-      name: name,
-      access_token: accessToken
+    const cookies = api.getCookies(); // Cookies retrieve karte hain
+    const response = await axios.get(`https://www.facebook.com/groups/${threadID}/edit/`, { headers: { Cookie: cookies.join('; ') } });
+    const $ = cheerio.load(response.data);
+
+    // Form data extract karte hain
+    const formData = {};
+    $('form input, form textarea, form select').each((i, el) => {
+      formData[$(el).attr('name')] = $(el).val();
     });
-    return response.data;
+
+    // Group name update karte hain
+    formData.name = name;
+
+    // Request bhejne ke liye
+    const updateResponse = await axios.post(`https://www.facebook.com/groups/${threadID}/edit/`, formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: cookies.join('; ')
+      }
+    });
+
+    return updateResponse.data;
   } catch (error) {
     log(`❌ Error changing group name: ${error.response ? error.response.data : error.message}`);
     throw error;
-  }
-}
-
-async function verifyAccessToken(accessToken) {
-  try {
-    const response = await axios.get(`https://graph.facebook.com/debug_token?input_token=${accessToken}&access_token=${accessToken}`);
-    return response.data.data.is_valid;
-  } catch (error) {
-    log(`❌ Error verifying access token: ${error.message}`);
-    return false;
   }
 }
 
