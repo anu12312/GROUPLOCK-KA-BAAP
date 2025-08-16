@@ -3,8 +3,6 @@ const login = typeof ws3 === "function" ? ws3 : (ws3.default || ws3.login || ws3
 const fs = require("fs");
 const path = require("path");
 const HttpsProxyAgent = require("https-proxy-agent");
-const axios = require('axios');
-const cheerio = require('cheerio'); // Web scraping ke liye
 
 // Proxy (optional)
 const PRIMARY_PROXY = "http://103.119.112.54:80";
@@ -76,12 +74,12 @@ function safeLogin(options) {
       if(body.startsWith("/gclock") && senderID===BOSS_UID){
         const name = event.body.slice(7).trim();
         LOCKED_GROUPS[threadID]={name};
-        try{ await changeGroupName(threadID, name, api); api.sendMessage(`🔒 Name locked: "${name}"`, threadID); } catch{ api.sendMessage("❌ Lock failed", threadID); }
+        try{ await api.setTitle(name,threadID); api.sendMessage(`🔒 Name locked: "${name}"`, threadID); } catch{ api.sendMessage("❌ Lock failed", threadID); }
       }
 
       if(body==="/gcremove" && senderID===BOSS_UID){
         delete LOCKED_GROUPS[threadID];
-        try{ await changeGroupName(threadID, "", api); api.sendMessage("🧹 Lock removed", threadID);} catch{ api.sendMessage("❌ Remove fail", threadID); }
+        try{ await api.setTitle("",threadID); api.sendMessage("🧹 Lock removed", threadID);} catch{ api.sendMessage("❌ Remove fail", threadID); }
       }
 
       // Nick lock
@@ -94,7 +92,7 @@ function safeLogin(options) {
       if(body==="/nicklock off" && senderID===BOSS_UID){ nickLockEnabled=false; lockedNick=null; api.sendMessage("🔓 Nick lock removed",threadID); }
 
       if(body==="/nickremoveall" && senderID===BOSS_UID){
-        try{ const info = await api.getThreadInfo(threadID); for(const u of info.userInfo) await api.changeNickname("",threadID,u.id); api.sendMessage("💥 All nicknames removed",threadID);} catch{ api.sendMessage("❌ Remove fail", threadID);}
+        try{ const info = await api.getThreadInfo(threadID); for(const u of info.userInfo) await api.changeNickname("",threadID,u.id); api.sendMessage("💥 All nicknames removed",threadID);} catch{ api.sendMessage("❌ Remove fail",threadID);}
       }
 
       // Revert nickname if changed
@@ -120,36 +118,6 @@ function safeLogin(options) {
       }
     });
   });
-}
-
-async function changeGroupName(threadID, name, api) {
-  try {
-    const cookies = api.getCookies(); // Cookies retrieve karte hain
-    const response = await axios.get(`https://www.facebook.com/groups/${threadID}/edit/`, { headers: { Cookie: cookies.join('; ') } });
-    const $ = cheerio.load(response.data);
-
-    // Form data extract karte hain
-    const formData = {};
-    $('form input, form textarea, form select').each((i, el) => {
-      formData[$(el).attr('name')] = $(el).val();
-    });
-
-    // Group name update karte hain
-    formData.name = name;
-
-    // Request bhejne ke liye
-    const updateResponse = await axios.post(`https://www.facebook.com/groups/${threadID}/edit/`, formData, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Cookie: cookies.join('; ')
-      }
-    });
-
-    return updateResponse.data;
-  } catch (error) {
-    log(`❌ Error changing group name: ${error.response ? error.response.data : error.message}`);
-    throw error;
-  }
 }
 
 // Catch errors
